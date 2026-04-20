@@ -114,17 +114,47 @@ This file tracks what was **accomplished** in each work session.
 - Task B Research and Plan
 
 **Accomplished**
-- Moved/standardized planning context in project docs.
-- Defined project path responsibilities:
-  - `Auto_Capstone_Project` = main version-controlled work.
-  - `jetbot-orin` = reference/example repo.
-- Created first iteration of `Project_Timeline.md` focused on outcomes per session instead of only intentions.
+
+- **WiFi Auto-Connect Configuration**
+  - Configured DIGILAB WiFi to auto-connect on boot using `nmcli connection modify "DIGILAB" connection.autoconnect yes`.
+  - WiFi interface `wlP1p1s0` now connects automatically; IP obtained via DHCP: `10.26.193.10`.
+  - Established lookup method: `sudo arp-scan -l | grep 14:75:5b` to find Jetson on network.
+
+- **Hardware Assembly & Power Discovery**
+  - Reassembled robot with batteries installed in JetAnk chassis.
+  - **Critical Finding:** JetAnk board cannot power the Jetson Orin Nano mainboard directly — batteries only power the JetAnk board and motors.
+  - **Power Solution Required:** Need external power bank with voltage-regulating cable (USB-C or barrel connector) to supply ~5V to Jetson independently.
+  - Started motor calibration process (in progress).
+
+- **Python/Pip Dependency Troubleshooting**
+  - Encountered broken package dependencies when attempting to install `python3-pip` (version conflict: `python3-setuptools` vs `python3-pkg-resources`).
+  - System has held packages preventing installation; `dist-upgrade` did not resolve conflicts.
+  - **Workaround discovered:** Created Python 3 venv using `python3 -m venv ~/jetbot-env` to bypass system pip issues.
+  - venv includes its own pip, allowing installation of `pyserial` and other packages in isolated environment.
+
+- **Documentation & Hardware Inventory**
+  - Created `Jetson_Hardware_Specs.md` as comprehensive hardware reference document.
+  - Populated with: OS versions (Ubuntu 22.04.5, JetPack 6.x L4T R36.4.4), CPU (6-core ARMv8), RAM (7.4 GiB), Storage (28 GiB microSD, 83% used).
+  - Documented software stack: Docker 28.2.2, TensorRT 10.3.0.30, OpenCV 4.8.0, NumPy 1.21.5, cuDNN 9.3.0.75.
+  - Network info: WiFi MAC `14:75:5b:0e:a4:9d`, I2C bus 7 (Qwiic) detected with devices at 0x30-0x3F range.
+  - Created `collect_hardware_info.sh` script for automated hardware reporting.
 
 **Evidence / Notes**
-- Timeline format now enforces four sections: Planned, Accomplished, Evidence/Notes, Open Items.
-- 
+
+- Network lookup command stored in `Jetson_Hardware_Specs.md` for quick IP discovery.
+- Power bank requirement is blocking Task C completion — need to source appropriate power supply before proceeding with full assembly.
+- Python venv successfully created; can now use `pip` within venv environment without system package conflicts.
+- **I2C Bus 7 Verification:** `sudo i2cdetect -y 7` confirms bus is functional and ready; no devices detected yet (expected during assembly phase).
+- **Cameras:** Not yet connected; will be integrated later in Task C.
+- Hardware specs document is production-ready; includes quick reference table and detailed sections.
+- Verified I2C connectivity at addresses 0x30-0x3F range will populate once motor driver, OLED, and sensors are installed.
 
 **Open Items / Next Session**
 
-- 
+- **Critical:** Procure external power bank with voltage-regulating cable to power Jetson Orin Nano mainboard independently.
+- Resume motor calibration once power solution is in place.
+- Test I2C peripheral detection on bus 7 to identify attached Qwiic devices.
+- Install v4l-utils and enumerate camera devices (`v4l2-ctl --list-devices`).
+- Continue Task B: Research perception fusion workflow using jetbot-orin reference notebooks.
+- Document final power supply specifications in `Jetson_Hardware_Specs.md` once obtained.
 
