@@ -75,6 +75,55 @@ This file tracks what was **accomplished** in each work session.
 
 ---
 
+## Session 2026-04-09
+
+**Planned**
+
+- Set up SSH access to the Jetson Orin Nano
+- Configure WiFi connectivity
+- Research hardware resources and reference implementations
+- Install OS packages for development environment
+
+**Accomplished**
+
+- **SSH Setup**
+  - Successfully installed and enabled OpenSSH server on Jetson Orin Nano.
+  - Verified remote SSH access from development machine.
+  - Confirmed Jetson Orin Nano is accessible at IP address on local network.
+
+- **WiFi Troubleshooting (Initial Diagnosis)**
+  - Attempted to configure WiFi connectivity.
+  - Discovered **root blocker:** Intel Wireless 8265 is physically present on PCIe (confirmed via `lspci`), but `iwlwifi` kernel module is missing from JetPack 6.x kernel.
+  - Diagnosed version mismatch: JetPack 6.x stripped-down kernel lacks WiFi driver support that was present in JetPack 5.x.
+  - Attempted `backport-iwlwifi-dkms` install but encountered symbol version mismatches — **deferred resolution to future session**.
+
+- **Research: jetbot-orin GitHub Repository**
+  - Discovered and cloned [moatazsawi/jetbot-orin](https://github.com/moatazsawi/jetbot-orin) as reference implementation for Orin Nano + JetBot.
+  - Analyzed docs and Docker containerization approach.
+  - Identified this as the correct reference for Task B/C workflows (road_following, object_following notebooks).
+  - Established this repo as a critical resource for understanding Orin-specific adaptations.
+
+- **OS Package Installation & Environment Setup**
+  - Installed foundational development packages and tools.
+  - Set up basic system utilities for remote management and development.
+  - Established baseline for Python and system libraries.
+
+**Evidence / Notes**
+
+- WiFi driver issue identified as a **blocking dependency** requiring kernel rebuild or driver backport.
+- jetbot-orin repo structure analyzed; Docker-based ML workflow confirmed as the intended path (vs. local pip installs).
+- SSH access validated as reliable fallback for remote work when WiFi is not available.
+- Network blocker led to adoption of Ethernet + USB tethering as interim connectivity strategy.
+
+**Open Items / Next Session**
+
+- Resolve WiFi driver blocker: Either rebuild kernel with iwlwifi or apply DKMS backport patch successfully.
+- Continue hardware assembly.
+- Test Ethernet/tethering fallback strategy for sustained remote access.
+- Begin Task C: formal assembly checklist and motor configuration.
+
+---
+
 ## Session 2026-04-17
 
 **Planned**
