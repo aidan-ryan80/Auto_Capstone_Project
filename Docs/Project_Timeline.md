@@ -207,3 +207,47 @@ This file tracks what was **accomplished** in each work session.
 - Continue Task B: Research perception fusion workflow using jetbot-orin reference notebooks.
 - Document final power supply specifications in `Jetson_Hardware_Specs.md` once obtained.
 
+---
+
+## Session 2026-04-26
+
+**Planned**
+
+- Resolve remaining Python/pip dependency issues
+- Research and identify external power solution for Jetson Orin Nano
+
+**Accomplished**
+
+- **Python/pip Installation (Direct Method)**
+  - System Python 3 did not have pip as a built-in module; venv workaround was insufficient for general package management.
+  - Used `curl` to directly install pip from PyPA bootstrap script: `curl https://bootstrap.pypa.io/get-pip.py | python3`
+  - Successfully installed pip system-wide; can now use `pip3` directly without venv activation.
+  - Installed `pyserial` package via pip: `pip3 install pyserial`
+  - Verified serial module works: `python3 -c "import serial; print(serial.__version__)"`
+
+- **External Power Solution Research**
+  - Researched Jetson Orin Nano power requirements and compatible power delivery options.
+  - **Identified Solution:** Need USB-C PD (Power Delivery) power bank or standard USB-C charger with voltage regulator capable of:
+    - Output: 5V 2A (minimum) for Jetson mainboard
+    - USB-C connector with proper power profile
+    - Alternative: Barrel connector (5.5mm x 2.1mm) adapter with voltage regulator if using non-USB-C power bank
+  - **Cable Specifications:**
+    - USB-C to Jetson barrel connector cable with integrated voltage regulator (recommended)
+    - OR separate USB-C power bank + USB-C to barrel adapter + voltage regulation module
+  - Documented power solution requirements for procurement
+
+**Evidence / Notes**
+
+- `curl | python3` method bypassed apt package manager conflicts entirely.
+- Direct pip installation is more maintainable than venv-only approach for system-wide packages.
+- Power bank solution options identified; ready for procurement.
+- Voltage regulation is critical — cannot directly use 5V output without regulation for stable Jetson operation.
+
+**Open Items / Next Session**
+
+- Procure USB-C PD power bank or equivalent power delivery solution.
+- Source appropriate voltage-regulating cable (USB-C barrel with regulation or separate modules).
+- Once power cable obtained: test power delivery to Jetson mainboard independently.
+- Resume full hardware assembly (motors, sensors) once power verified working.
+- Continue Task B: Perception fusion research with confirmed power stability.
+

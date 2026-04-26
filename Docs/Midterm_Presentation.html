@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Midterm Presentation — Self-Driving Vehicle</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" />
+  <style>
+    :root {
+      --accent: #76b900; /* NVIDIA green — fits the Jetson theme */
+    }
+    .reveal h1, .reveal h2, .reveal h3 { color: var(--accent); }
+    .reveal section { text-align: left; }
+    .reveal .title-slide { text-align: center; }
+    .reveal .title-slide h1 { font-size: 2em; }
+    .reveal .title-slide p  { color: #ccc; font-size: 0.9em; margin-top: 0.3em; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.63em; }
+    th { background: #333; color: var(--accent); padding: 4px 8px; }
+    td { padding: 4px 8px; border-bottom: 1px solid #444; vertical-align: top; }
+    tr:nth-child(even) td { background: #1e1e1e; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.72em;
+      font-weight: bold;
+      margin-right: 6px;
+    }
+    .tag-c  { background: #2a5f00; color: #a3e635; }
+    .tag-b  { background: #1a3d5f; color: #60a5fa; }
+    .tag-a  { background: #5f1a1a; color: #f87171; }
+    .tag-done    { background: #2a5f00; color: #a3e635; }
+    .tag-blocked { background: #5f1a1a; color: #f87171; }
+
+    ul { margin: 0.15em 0 0.15em 1.1em; }
+    li { margin: 0.25em 0; font-size: 0.8em; }
+    p  { font-size: 0.8em; margin: 0.3em 0; }
+
+    .two-col { display: flex; gap: 2em; }
+    .two-col > div { flex: 1; }
+
+    /* slide numbers handled by reveal.js slideNumber option */
+
+    code { background: #222; padding: 1px 5px; border-radius: 3px; color: #a3e635; font-size: 0.9em; }
+
+    .step { display: flex; align-items: flex-start; margin: 0.4em 0; }
+    .step-num {
+      min-width: 1.6em; height: 1.6em; line-height: 1.6em;
+      background: var(--accent); color: #000;
+      border-radius: 50%; text-align: center;
+      font-weight: bold; font-size: 0.8em;
+      margin-right: 0.6em; margin-top: 0.15em;
+    }
+    .step-text { font-size: 0.82em; }
+
+    .challenge-icon { color: #f87171; margin-right: 4px; }
+    .solution-icon  { color: #a3e635; margin-right: 4px; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+════════════════════════════════════════════════════════════════ -->
+<section class="title-slide">
+  <h1>Project 3: Self-Driving Vehicle</h1>
+  <h3 style="color:#ccc; font-size:0.9em;">Midterm Check — 27 April 2026</h3>
+  <p style="margin-top:1.5em;">
+    <strong style="color:var(--accent);">Team:</strong> Denis Vasilev &nbsp;·&nbsp; Aidan Ryan &nbsp;·&nbsp; Nora Cerveny &nbsp;·&nbsp; Adam Ryan
+  </p>
+  <p>IMC University of Applied Sciences &nbsp;·&nbsp; Prof. Tingting Yuan</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 2 — PROJECT OVERVIEW
+════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Project Overview</h2>
+  <p>Build an autonomous wheeled robot using the <strong>Jetson Orin Nano Super</strong> platform.</p>
+  <br/>
+  <div style="font-size:0.85em;">
+    <p><span class="tag tag-c">[C] Easy</span> Assemble vehicle and integrate with Jetson platform</p>
+    <p><span class="tag tag-b">[B] Medium</span> Implement camera fusion for perception (lane + object detection)</p>
+    <p><span class="tag tag-a">[A] Hard</span> Implement camera fusion for autonomous driving control</p>
+  </div>
+  <br/>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 3 — HARDWARE OVERVIEW
+════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Hardware &amp; Software Stack</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="font-size:0.85em;">Hardware</h3>
+      <ul>
+        <li>JetAnk chassis (4WD tracked/wheeled)</li>
+        <li>Jetson Orin Nano Super — 8 GB RAM, 6-core ARM</li>
+        <li>Intel 8265 WiFi (<code>wlP1p1s0</code>)</li>
+        <li>Qwiic I2C bus (<code>/dev/i2c-7</code>)</li>
+        <li>CSI camera (to be mounted)</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="font-size:0.85em;">Software</h3>
+      <ul>
+        <li>JetPack 6.x / L4T R36.4.4 (Ubuntu 22.04)</li>
+        <li>Docker 28.2 — ML + display containers</li>
+        <li>TensorRT 10.3 &nbsp;·&nbsp; OpenCV 4.8</li>
+        <li>PyTorch / JupyterLab (via Docker)</li>
+        <li><code>pip</code> installed via PyPA bootstrap (JetPack strips it from Python)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 4 — TASK C PROGRESS: SESSION LOG
+════════════════════════════════════════════════════════════════ -->
+<section style="font-size:0.82em;">
+  <h2>Task C Progress — Session Log</h2>
+  <table>
+    <tr><th>Date</th><th>What We Did</th></tr>
+    <tr>
+      <td>12 Mar</td>
+      <td>Hardware assembly started. OS flash failed — legacy JetBot JP4.x image incompatible with Orin Nano hardware.</td>
+    </tr>
+    <tr>
+      <td>24 Mar</td>
+      <td>Root cause identified: Jetson Orin Nano Super requires JetPack 6.0+ — legacy JP4.x targets the older Jetson Nano, not Orin. Flashed correct image (<code>jp62-orin-nano-sd-card-image</code>). OS booted successfully.</td>
+    </tr>
+    <tr>
+      <td>09 Apr</td>
+      <td>SSH enabled. WiFi blocked: Intel 8265 <code>iwlwifi</code> kernel module absent in JetPack 6.x. Found <code>jetbot-orin</code> reference repo.</td>
+    </tr>
+    <tr>
+      <td>17 Apr</td>
+      <td>WiFi fixed via <code>backport-iwlwifi-dkms</code>. Corrected interface name to <code>wlP1p1s0</code>. Docker ML + display containers pulled and tested.</td>
+    </tr>
+    <tr>
+      <td>20 Apr</td>
+      <td>WiFi auto-connect configured. Jupyter reachable at <code>:8888</code>. Discovered JetAnk board cannot power Jetson mainboard — external power bank required. Hardware specs documented.</td>
+    </tr>
+    <tr>
+      <td>26 Apr</td>
+      <td>JetPack strips <code>pip</code>/<code>venv</code> from Python; <code>apt</code> install blocked by package conflicts. Bootstrapped pip via PyPA curl script. Installed <code>pyserial</code>. Researched USB-C PD power bank + voltage-regulating cable specs required for Jetson mainboard.</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 5 — TASK C CURRENT STATUS
+════════════════════════════════════════════════════════════════ -->
+<section style="font-size:0.9em;">
+  <h2>Task C — Current Status</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="font-size:0.8em; margin:0.3em 0;"><span class="tag tag-done">✓ Done</span></h3>
+      <ul>
+        <li>OS flashed (JetPack 6.x)</li>
+        <li>SSH remote access</li>
+        <li>WiFi driver installed + auto-connect</li>
+        <li>Docker ML container (Jupyter at :8888)</li>
+        <li><code>pip</code> bootstrapped via PyPA curl install</li>
+        <li>Power solution researched + specs documented</li>
+        <li>Hardware + software docs</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="font-size:0.8em; margin:0.3em 0;"><span class="tag tag-blocked">⚠️ Blocked / Remaining</span></h3>
+      <ul>
+        <li><strong>JetAnk board cannot power Jetson mainboard</strong> — requires external voltage-regulating power cable</li>
+        <li>Mount CSI camera</li>
+        <li>Motor calibration</li>
+        <li>End-to-end hardware demo video</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 6 — TASK B PLAN
+════════════════════════════════════════════════════════════════ -->
+<section style="font-size:0.9em;">
+  <h2>Task B — Camera Fusion for Perception</h2>
+  <p>Fuse lane detection and object detection into a single per-frame state:</p>
+  <pre style="font-size:0.6em; background:#111; padding:0.5em; border-radius:6px; color:#a3e635; margin:0.4em 0;">{
+  "lane_offset": 0.10,   // deviation from center
+  "lane_conf":   0.84,   // detection confidence
+  "obstacle": { "class": "person", "conf": 0.92, "distance_m": 1.7 },
+  "risk_level":   "high",
+  "action_hint":  "stop"
+}</pre>
+  <div class="two-col" style="margin-top:0.4em;">
+    <div>
+      <h3 style="font-size:0.8em; margin:0.3em 0;">Sources</h3>
+      <ul>
+        <li>Lane: <code>notebooks/road_following/</code></li>
+        <li>Objects: YOLO via <code>notebooks/object_following/</code></li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="font-size:0.8em; margin:0.3em 0;">Evaluation</h3>
+      <ul>
+        <li>FPS under various resolutions</li>
+        <li>Accuracy under lighting / blur / occlusion</li>
+        <li>TensorRT optimisation if FPS too low</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 7 — TASK A PLAN
+════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Task A — Camera Fusion for Driving <span style="font-size:0.6em; color:#888;">(stretch goal)</span></h2>
+  <p>Convert fused perception state into motor commands.</p>
+  <table style="margin-top:0.4em;">
+    <tr><th>Perception State</th><th>Action</th></tr>
+    <tr><td>Lane centred, no obstacle</td><td>Move forward</td></tr>
+    <tr><td>Lane offset detected</td><td>Apply steering correction proportional to offset</td></tr>
+    <tr><td>High risk or low confidence</td><td>Slow down / stop</td></tr>
+    <tr><td>Obstacle within threshold distance</td><td>Emergency stop</td></tr>
+  </table>
+  <p style="margin-top:0.5em;">Safety gates: confidence threshold · obstacle-distance threshold · manual e-stop</p>
+  <p>Deliverable: autonomous driving demo video</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 8 — WORK PLAN
+════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Work Plan — Priority Order</h2>
+  <p style="color:#888; font-size:0.72em; margin-bottom:0.5em;">We do not expect to complete all three tasks; focus is on C and B.</p>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text"><strong>Resolve power blocker</strong> — acquire voltage-regulating cable; connect and test motors + camera</div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text"><strong>Complete Task C</strong> — motor calibration, camera mount, end-to-end hardware demo video</div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text"><strong>Task B</strong> — implement and evaluate fused perception pipeline; live overlay + logs + metrics</div>
+  </div>
+  <div class="step" style="opacity:0.55;">
+    <div class="step-num" style="background:#555;">4</div>
+    <div class="step-text"><strong>Task A (stretch)</strong> — driving control loop, if time permits after B is complete</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 9 — CHALLENGES + SOLUTIONS
+════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Challenges &amp; How We Solved Them</h2>
+  <table>
+    <tr><th>Challenge</th><th>Solution</th></tr>
+    <tr>
+      <td><span class="challenge-icon">✗</span> Legacy JetBot JP4.x image refused to boot on Orin Nano</td>
+      <td><span class="solution-icon">✓</span> Researched NVIDIA forums; identified <code>jp62-orin-nano-sd-card-image</code> as required JetPack 6.x base</td>
+    </tr>
+    <tr>
+      <td><span class="challenge-icon">✗</span> WiFi interface absent — Intel 8265 <code>iwlwifi</code> module not included in JetPack 6.x kernel</td>
+      <td><span class="solution-icon">✓</span> Installed <code>backport-iwlwifi-dkms</code>; corrected interface name from <code>wlan0</code> to <code>wlP1p1s0</code></td>
+    </tr>
+    <tr>
+      <td><span class="challenge-icon">✗</span> JetPack strips <code>pip</code>/<code>venv</code> from Python; <code>apt</code> install blocked by package conflicts</td>
+      <td><span class="solution-icon">✓</span> Bypassed <code>apt</code> entirely — bootstrapped pip via <code>curl https://bootstrap.pypa.io/get-pip.py | python3</code></td>
+    </tr>
+    <tr>
+      <td><span class="challenge-icon">✗</span> JetAnk expansion board cannot supply sufficient voltage to power Jetson mainboard</td>
+      <td><span class="solution-icon">→</span> Identified need for external power bank with voltage-regulating cable (currently procuring)</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 10 — SUMMARY + Q&A
+════════════════════════════════════════════════════════════════ -->
+<section class="title-slide">
+  <h2>Summary</h2>
+  <div style="text-align:left; max-width:680px; margin:0.6em auto 0;">
+    <p><span class="tag tag-done">Done</span> Platform running — SSH, WiFi, Docker, Jupyter, pip</p>
+    <p><span class="tag tag-blocked">Blocked</span> Motors + camera pending power supply fix</p>
+    <p><span class="tag tag-b">[B] Next</span> Camera fusion perception pipeline after Task C closes</p>
+    <p><span class="tag tag-a">[A] Stretch</span> Driving control if time permits</p>
+  </div>
+  <h2 style="margin-top:0.6em;">Questions?</h2>
+</section>
+
+</div><!-- .slides -->
+</div><!-- .reveal -->
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    transitionSpeed: 'fast',
+    controls: true,
+    progress: true,
+    center: true,
+    width: 1100,
+    height: 700,
+  });
+</script>
+</body>
+</html>
