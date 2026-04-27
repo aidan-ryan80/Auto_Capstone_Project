@@ -5,21 +5,21 @@
   <title>Midterm Presentation — Self-Driving Vehicle</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" />
   <style>
     :root {
-      --accent: #76b900; /* NVIDIA green — fits the Jetson theme */
+      --accent: #2d6a00;
     }
     .reveal h1, .reveal h2, .reveal h3 { color: var(--accent); }
     .reveal section { text-align: left; }
     .reveal .title-slide { text-align: center; }
     .reveal .title-slide h1 { font-size: 2em; }
-    .reveal .title-slide p  { color: #ccc; font-size: 0.9em; margin-top: 0.3em; }
+    .reveal .title-slide p  { color: #444; font-size: 0.9em; margin-top: 0.3em; }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.63em; }
-    th { background: #333; color: var(--accent); padding: 4px 8px; }
-    td { padding: 4px 8px; border-bottom: 1px solid #444; vertical-align: top; }
-    tr:nth-child(even) td { background: #1e1e1e; }
+    th { background: #e8f5e1; color: var(--accent); padding: 4px 8px; border-bottom: 2px solid #a3c97a; }
+    td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; color: #222; }
+    tr:nth-child(even) td { background: #f7f7f7; }
 
     .tag {
       display: inline-block;
@@ -29,35 +29,35 @@
       font-weight: bold;
       margin-right: 6px;
     }
-    .tag-c  { background: #2a5f00; color: #a3e635; }
-    .tag-b  { background: #1a3d5f; color: #60a5fa; }
-    .tag-a  { background: #5f1a1a; color: #f87171; }
-    .tag-done    { background: #2a5f00; color: #a3e635; }
-    .tag-blocked { background: #5f1a1a; color: #f87171; }
+    .tag-c  { background: #d4edba; color: #2d6a00; }
+    .tag-b  { background: #cce3f7; color: #0a4d8c; }
+    .tag-a  { background: #fdd; color: #9b1c1c; }
+    .tag-done    { background: #d4edba; color: #2d6a00; }
+    .tag-blocked { background: #fdd; color: #9b1c1c; }
 
     ul { margin: 0.15em 0 0.15em 1.1em; }
-    li { margin: 0.25em 0; font-size: 0.8em; }
-    p  { font-size: 0.8em; margin: 0.3em 0; }
+    li { margin: 0.25em 0; font-size: 0.8em; color: #222; }
+    p  { font-size: 0.8em; margin: 0.3em 0; color: #222; }
 
     .two-col { display: flex; gap: 2em; }
     .two-col > div { flex: 1; }
 
     /* slide numbers handled by reveal.js slideNumber option */
 
-    code { background: #222; padding: 1px 5px; border-radius: 3px; color: #a3e635; font-size: 0.9em; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; color: #2d6a00; font-size: 0.9em; border: 1px solid #ddd; }
 
     .step { display: flex; align-items: flex-start; margin: 0.4em 0; }
     .step-num {
       min-width: 1.6em; height: 1.6em; line-height: 1.6em;
-      background: var(--accent); color: #000;
+      background: var(--accent); color: #fff;
       border-radius: 50%; text-align: center;
       font-weight: bold; font-size: 0.8em;
       margin-right: 0.6em; margin-top: 0.15em;
     }
-    .step-text { font-size: 0.82em; }
+    .step-text { font-size: 0.82em; color: #222; }
 
-    .challenge-icon { color: #f87171; margin-right: 4px; }
-    .solution-icon  { color: #a3e635; margin-right: 4px; }
+    .challenge-icon { color: #c0392b; margin-right: 4px; }
+    .solution-icon  { color: #2d6a00; margin-right: 4px; }
   </style>
 </head>
 <body>
@@ -69,7 +69,7 @@
 ════════════════════════════════════════════════════════════════ -->
 <section class="title-slide">
   <h1>Project 3: Self-Driving Vehicle</h1>
-  <h3 style="color:#ccc; font-size:0.9em;">Midterm Check — 27 April 2026</h3>
+  <h3 style="color:#555; font-size:0.9em;">Midterm Check — 27 April 2026</h3>
   <p style="margin-top:1.5em;">
     <strong style="color:var(--accent);">Team:</strong> Denis Vasilev &nbsp;·&nbsp; Aidan Ryan &nbsp;·&nbsp; Nora Cerveny &nbsp;·&nbsp; Adam Ryan
   </p>
@@ -145,7 +145,7 @@
     </tr>
     <tr>
       <td>20 Apr</td>
-      <td>WiFi auto-connect configured. Jupyter reachable at <code>:8888</code>. Discovered JetAnk board cannot power Jetson mainboard — external power bank required. Hardware specs documented.</td>
+      <td>WiFi auto-connect configured. Jupyter reachable at <code>:8888</code>. Discovered JetAnk board cannot power Jetson mainboard — external power bank required. Hardware specs documented with bash script.</td>
     </tr>
     <tr>
       <td>26 Apr</td>
@@ -190,7 +190,7 @@
 <section style="font-size:0.9em;">
   <h2>Task B — Camera Fusion for Perception</h2>
   <p>Fuse lane detection and object detection into a single per-frame state:</p>
-  <pre style="font-size:0.6em; background:#111; padding:0.5em; border-radius:6px; color:#a3e635; margin:0.4em 0;">{
+  <pre style="font-size:0.6em; background:#f4f9ee; padding:0.5em; border-radius:6px; color:#2d6a00; border:1px solid #c5e0a0; margin:0.4em 0;">{
   "lane_offset": 0.10,   // deviation from center
   "lane_conf":   0.84,   // detection confidence
   "obstacle": { "class": "person", "conf": 0.92, "distance_m": 1.7 },
@@ -252,7 +252,7 @@
     <div class="step-text"><strong>Task B</strong> — implement and evaluate fused perception pipeline; live overlay + logs + metrics</div>
   </div>
   <div class="step" style="opacity:0.55;">
-    <div class="step-num" style="background:#555;">4</div>
+    <div class="step-num" style="background:#aaa;">4</div>
     <div class="step-text"><strong>Task A (stretch)</strong> — driving control loop, if time permits after B is complete</div>
   </div>
 </section>
