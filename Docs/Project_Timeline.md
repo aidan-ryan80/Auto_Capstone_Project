@@ -251,3 +251,48 @@ This file tracks what was **accomplished** in each work session.
 - Resume full hardware assembly (motors, sensors) once power verified working.
 - Continue Task B: Perception fusion research with confirmed power stability.
 
+---
+
+## Session 2026-05-13
+
+**Planned**
+
+- Fix WiFi driver installation (DKMS build completed but not installed)
+- Debug desktop environment boot failure (GDM3 not displaying on monitor)
+- Resolve broken apt packages blocking system updates
+
+**Accomplished**
+
+- **WiFi Driver Installation & Verification**
+  - DKMS had built the backport-iwlwifi module but skipped the install step. Ran: `sudo dkms install backport-iwlwifi/11510 -k 5.15.148-tegra`
+  - Module installation succeeded ("already installed"), but standard kernel iwlwifi drivers were already loaded (iwlwifi, iwlmvm, mac80211, cfg80211 all present in lsmod).
+  - Verified WiFi connectivity: `nmcli device status` shows wlP1p1s0 connected to DIGILAB (10.26.193.10).
+  - **WiFi is now fully operational and stable.**
+
+- **Desktop Environment Fix (GDM3 Boot Issue)**
+  - Root cause identified: GDM3 binary was **missing** from `/usr/sbin/gdm3`. Init script checks `test -x $DAEMON || exit 0` which silently skips if binary doesn't exist.
+  - Service appeared "active (exited)" because systemd config has `RemainAfterExit=yes`, masking the fact that no daemon was running.
+  - Fixed by reinstalling gdm3: `sudo apt install --reinstall gdm3`
+  - Verified: `/usr/sbin/gdm3` now present and executable; manual X server startup confirmed working (2560x1440 display detected, NVIDIA extensions loaded).
+  - Desktop environment now boots successfully on system startup.
+
+- **System Testing & Validation**
+  - Tested manual X server startup via `sudo startx -- :0` — confirmed working with full NVIDIA driver support and monitor detection.
+  - Verified NVIDIA driver loaded (nvidia, tegra_dce, drm kernel modules all present).
+  - Confirmed display devices present: `/dev/dri/card0` (DRM) and `/dev/dri/renderD128` (GPU render).
+  - GDM3 service now respawns correctly on reboot with full graphical session.
+
+**Evidence / Notes**
+
+- WiFi: `lsmod | grep iwl` shows iwlwifi, iwlmvm, mac80211, cfg80211 all loaded; connectivity stable to DIGILAB network.
+- Desktop: Manual X startup log showed `(II) NVIDIA(0): Display Device found` with correct resolution and NVIDIA-specific extensions (NV_CONTROL, NV_GLX, DRI2, DRI3, Present, GLX).
+- GDM issue was silent failure, not service misconfiguration — binary simply missing from OS installation.
+- apt package state is clean; no held packages detected.
+
+**Open Items / Next Session**
+
+- Procure USB-C PD power bank + voltage-regulating cable for independent Jetson mainboard power.
+- Resume Task C: complete hardware assembly with motors/sensors now that WiFi and desktop are stable.
+- Test full GUI environment with desktop, monitor, and wireless connectivity.
+- Begin Task B perception fusion research using jetbot-orin reference notebooks (now that system is fully operational).
+
