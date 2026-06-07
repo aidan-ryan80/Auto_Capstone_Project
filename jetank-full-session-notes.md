@@ -425,3 +425,68 @@ rm -rf ~/.config/claude
 - [ ] Test basic motion notebooks from JupyterLab (JETANK_1_servos_en.ipynb confirmed working with updated servoInit values)
 - [ ] Assemble remaining robotic arm (servos 2, 3, 4) and update servoInit accordingly
 - [ ] Mount Veger T100 onto JETANK chassis (velcro or 3D printed bracket, mount low and centred)
+
+---
+
+## 13. Drive Motor Investigation (IN PROGRESS — not yet resolved)
+
+### Hardware
+- **Motor driver chip:** TB6612FNG dual H-bridge on JETANK expansion board
+- **PWM controller:** PCA9685 at I2C address `0x60` on bus **7** (confirmed present)
+- **Motor terminals:** Left and right tank thread motors physically connected to expansion board output terminals
+- **Power:** 18650 batteries at 11.85V (79%), switch ON, charger connected
+
+### Software stack confirmed
+- `from jetbot import Robot` in JupyterLab resolves to `/home/jetbot-04/jetbot_waveshare/jetbot/robot.py` ✅
+- `robot.py` uses `PCA9685(address=0x60, bus=7)` — correct for this hardware ✅
+- `Robot()` instantiates without errors ✅
+- All `robot.forward()`, `robot.left()` etc. commands run without errors ✅
+- **But motors produce zero physical movement** ❌
+
+### Directories on the system
+```
+~/jetbot/           — original NVIDIA JetBot repo (NOT jetbot-orin)
+~/jetbot-orin/      — moatazsawi/jetbot-orin repo (Docker-based, no Python motor files)
+~/jetbot_waveshare/ — Waveshare adaptation (what JupyterLab actually imports)
+~/JETANK/           — waveshare/JETANK repo (servo control, install scripts)
+```
+
+### Key files
+```
+~/jetbot_waveshare/jetbot/robot.py    — Robot class (i2c_bus=7, address=0x60)
+~/jetbot_waveshare/jetbot/motor.py    — Motor class (channel mapping)
+~/jetbot_waveshare/jetbot/pca9685.py  — PCA9685 driver (smbus2-based)
+```
+
+### Fixes already applied
+**Fix 1 — pca9685.py set_pin(0) bug:**
+The original code used `set_pwm(channel, 0, 0)` for value=0. Per PCA9685 datasheet, when ON=OFF=0, ON has priority → pin is forced always HIGH. This means IN2 was never being pulled LOW, putting TB6612FNG in brake mode. Fixed to:
+```python
+if value == 0:
+    self.set_pwm(channel, 0, 4096)  # FULL_OFF bit — was (0,0) which is FULL ON
+```
+
+**Fix 2 — motor.py channel mapping updated to Waveshare standard:**
+```python
+_MOTOR_CHANNELS = {
+    1: (0, 1, 2),   # PWMA=0, AIN1=1, AIN2=2  (left motor)
+    2: (5, 3, 4),   # PWMB=5, BIN1=3, BIN2=4  (right motor)
+    3: (10, 9, 8),
+    4: (13, 12, 11),
+}
+```
+Original was Adafruit MotorHAT layout: `1: (2,3,4)` and `2: (7,6,5)` — wrong for Waveshare hardware.
+
+**Neither fix produced motor movement.**
+
+### Brute force scan performed
+Tried all common PCA9685 channel triplets with correct FULL_OFF logic and STBY channels 8,9,12,13,14,15 set HIGH — no movement on any combination.
+
+### What has NOT been verified yet
+- Whether PCA9685 register writes are actually sticking (read-back verification)
+- Exact schematic mapping of PCA9685 channels → TB6612FNG pins on the JETANK expansion board
+- Whether TB6612FNG STBY pin is hardwired or controlled by a PCA9685 channel not yet tried
+- Whether TB6612FNG VM pin is actually receiving the 12V motor supply
+
+### Recommended next step for Claude Code
+Compare `waveshare/JETANK` GitHub repo and `jetbot_waveshare` local package to find the correct PCA9685 channel → TB6612FNG wiring for the JETANK expansion board. Read back PCA9685 registers after writes to confirm communication. Cross-reference with JETANK expansion board schematic if available.
