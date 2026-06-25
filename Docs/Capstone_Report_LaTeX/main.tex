@@ -1,0 +1,807 @@
+\documentclass{imc-inf}
+
+\title{Autonomous Perception-Fused Driving on the Jetson Orin Nano Platform}
+\subtitle{Camera Fusion for Perception and Control --- Waveshare JETANK AI Kit + NVIDIA Jetson Orin Nano Super}
+\thesistype{Capstone Project Report}
+\author{Adam Ryan, Aidan Ryan, Denis Vasilev, Nora Regina Cerveny}
+\supervisor{Prof. Tingting Yuan}
+\copyrightyear{2026}
+\submissiondate{26.06.2026}
+\keywords{Jetson Orin Nano, JETANK, Autonomous Driving, Camera Fusion, Edge AI, Robotics}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{textcomp}
+
+\lstset{
+    basicstyle=\footnotesize\ttfamily,
+    frame=single,
+    breaklines=true,
+    captionpos=b,
+    tabsize=2
+}
+
+\begin{document}
+\frontmatter\maketitle{}
+
+%% --- CUSTOM DECLARATION (group version) -----------------------------------
+\chapter*{Declaration of honour}
+\addtoToC{Declaration of honour}
+
+We declare on our word of honour that we have written this \thesistype{} on our own and that we have not used any sources or resources other than stated and that we have marked those passages and/or ideas that were either verbally or textually extracted from sources. This also applies to drawings, sketches, graphic representations as well as to sources from the internet. The \thesistype{} has not been submitted in this or similar form for assessment at any other domestic or foreign post-secondary educational institution and has not been published elsewhere. The present \thesistype{} complies with the version submitted electronically.
+
+\vspace{3em}
+
+\begin{tabular}{@{}p{.5in}p{3in}@{}}
+ & \hrulefill \\
+ & Adam Ryan \\
+ & \\[1.5em]
+ & \hrulefill \\
+ & Aidan Ryan \\
+ & \\[1.5em]
+ & \hrulefill \\
+ & Denis Vasilev \\
+ & \\[1.5em]
+ & \hrulefill \\
+ & Nora Regina Cerveny \\
+\end{tabular}
+
+\newpage
+%% ---------------------------------------------------------------------------
+
+\begin{abstract}
+This report documents a semester-long capstone project to build an autonomous,
+camera-fusion-driven mobile robot on a Waveshare JETANK AI Kit chassis retrofitted
+with an NVIDIA Jetson Orin Nano Super compute module. The project was scoped into
+three tasks: Task~C (hardware assembly and platform integration), Task~B (camera
+fusion for perception, combining lane detection and object detection into a single
+per-frame state), and Task~A (camera fusion for driving, converting that fused state
+into safety-gated steering and throttle commands).
+
+The team's core technical finding is that the JETANK chassis, designed around the
+original Jetson Nano, is not a drop-in match for the Jetson Orin Nano Super. The
+two platforms differ in power delivery, kernel packaging, camera driver model,
+I2C bus numbering, network interface naming, and motor-driver channel mapping.
+
+Across the semester, ten distinct system-level integration issues were identified
+and resolved, spanning OS imaging, WiFi driver support, desktop environment, Python
+packaging, CSI camera enablement, OLED display, and serial servo calibration. Two
+blockers were not resolved before the project deadline: a power architecture mismatch
+requiring an independently sourced power bank, and unresponsive drive motors where
+two confirmed software bugs were fixed but the root cause remains at the hardware
+layer. As a direct consequence, Tasks~B and~A were fully designed at the architectural
+level but could not be implemented or tested on hardware.
+
+This report presents the working hypothesis for the remaining motor fault,
+a documented bring-up path for Orin-generation JetBot hardware, and the complete
+design for the fused-perception and driving-control pipelines.
+\end{abstract}
+
+
+
+\addtoToC{Table of Contents}%
+\tableofcontents%
+\clearpage
+
+\addtoToC{List of Tables}%
+\listoftables
+\clearpage
+
+
+
+%%   MAIN MATTER  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\mainmatter%
+
+%==============================================================================
+\chapter{Introduction}
+\label{chap:introduction}
+%==============================================================================
+
+\section{Why Edge AI Robotics}
+\label{sec:why-edge-ai}
+
+Autonomous mobile robots that perform inference locally, rather than relying on a
+cloud connection, are essential wherever latency, privacy, or connectivity cannot
+be guaranteed. Warehouses, hospitals, agricultural inspection, and last-mile
+delivery are common use cases. The NVIDIA Jetson family of single-board computers
+provides GPU-accelerated edge inference in a form factor compact enough for small
+robots, making it a natural teaching platform for this kind of system \cite{nvidia_jetbot,nvidia_jetson_orin}.
+
+\section{Why Camera Fusion}
+\label{sec:why-camera-fusion}
+
+Individual perception modalities are fragile in isolation. Lane detection alone
+fails the moment an obstacle obscures the road markings; object detection alone
+cannot determine where the robot sits within its lane. Fusing both into a single
+per-frame state (lane offset plus obstacle class, position, and distance)
+produces a more complete and robust basis for control decisions than either signal
+alone. This is the central technical idea the project set out to demonstrate.
+
+\section{The JetBot / Orin Generation Gap}
+\label{sec:generation-gap}
+
+The widely used NVIDIA JetBot reference platform targets the original Jetson Nano
+(2019, JetPack~4.x). This project instead used the newer Jetson Orin Nano Super
+(2024, JetPack~6.x), mounted on a Waveshare JETANK chassis that was itself designed
+around the older Nano \cite{waveshare_jetank}. The two Jetson generations differ substantially in power
+requirements, kernel packaging, camera driver model, and peripheral addressing.
+Existing JetBot and JETANK tutorials assume the older hardware and require substantial
+adaptation at nearly every layer of the stack. A secondary contribution of this project,
+beyond the three assigned tasks, is a documented bring-up path for teams attempting
+the same Orin-generation upgrade in the future.
+
+\section{Task Scope}
+\label{sec:task-scope}
+
+\begin{description}
+\item[Task C --- Hardware Assembly and Platform Integration]
+Chassis build, compute module mounting, camera/motor/display validation, and
+remote development workflow.
+\item[Task B --- Camera Fusion for Perception]
+Combine a lane-following model and a YOLO-based object detector \cite{redmon2016yolo,ultralytics_yolo} into one
+structured, per-frame perception state.
+\item[Task A --- Camera Fusion for Driving]
+Convert the fused perception state into a safety-gated control policy
+(steering correction, speed control, emergency stop).
+\end{description}
+
+%==============================================================================
+\chapter{Materials and System Overview}
+\label{chap:materials}
+%==============================================================================
+
+This chapter lists the hardware and software configuration as of the end of the
+semester, including the corrected channel mappings and bus numbers discovered
+during bring-up (Chapter~\ref{chap:task-c}).
+
+\begin{table}[htbp]
+\centering
+\caption{Hardware components used in the project.}
+\label{tab:hardware}
+\footnotesize
+\begin{tabular}{@{}p{0.9in}p{2.6in}p{1.8in}@{}}
+\toprule
+\textbf{Component} & \textbf{Model / Spec} & \textbf{Purpose} \\
+\midrule
+Main compute & NVIDIA Jetson Orin Nano Super (8~GB) & GPU-accelerated inference;
+6$\times$ ARM Cortex-A78, Ampere GPU, 1024 CUDA cores \\
+Chassis & Waveshare JETANK AI Kit & Tank-track chassis; TB6612FNG dual
+H-bridge motor driver \cite{toshiba_tb6612fng}; PCA9685 PWM controller \cite{nxp_pca9685} \\
+Camera & Waveshare IMX219-160 (CSI) & 160$^\circ$ FOV, 8~MP, MIPI CSI-2 to CAM0 \\
+Servos & Feetech SCS15-AP $\times$5 & Serial bus servos for 5-DOF arm
+(2 mounted: base rotation + camera tilt) \\
+Display & SSD1306 OLED (128$\times$32) & System status: IP address, CPU/RAM,
+component health \\
+Power (Jetson) & Veger T100 100~W USB-C PD bank + PD trigger cable
+(15~V, 5.5$\times$2.5~mm barrel) & Independent 9--20~V supply for Orin mainboard \\
+Power (motors) & 18650 cells (3S, $\sim$12.6~V) via JETANK expansion board &
+Motor/servo rail only \\
+Sensors & INA219 current sensor & Battery voltage/current monitoring \\
+Networking & Intel Wireless 8265/8275 (PCIe) & WiFi via \texttt{wlP1p1s0}
+(requires DKMS backport on JetPack~6.x) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Software Stack}
+\label{sec:software-stack}
+
+\begin{table}[htbp]
+\centering
+\caption{Software stack.}
+\label{tab:software}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Version / Detail} \\
+\midrule
+OS & JetPack~6.2 (L4T R36.4.4, kernel 5.15.148-tegra) \\
+GPU compute & CUDA~12.6, cuDNN~9.3.0.75, TensorRT~10.3.0.30 \cite{nvidia_tensorrt} \\
+ML framework & PyTorch via Docker containers (moatazsawi/jetbot-orin) \cite{moatazsawi_jetbot_orin} \\
+Computer vision & OpenCV~4.8.0, GStreamer with \texttt{nvarguscamerasrc} \\
+Motor control & PCA9685 driver (\texttt{smbus2}), TB6612FNG via custom \texttt{Robot} class \\
+Servo control & Feetech SCS SDK (\texttt{SCSCtrl}), 1~Mbps on \texttt{/dev/ttyTHS1} \\
+Display & \texttt{luma.oled} (SSD1306, I2C bus~7), systemd service \\
+Container runtime & Docker~28.2.2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\chapter[Methodology]{Methodology and Project Timeline}
+\label{chap:methodology}
+%==============================================================================
+
+The project proceeded as a series of bring-up sessions, each resolving one or more
+blocking issues before the next layer of the stack could be attempted. This chapter
+summarises the chronological path; full session notes are retained in the project
+archive.
+
+\section{March --- Platform Misidentification and OS Selection}
+\label{sec:march}
+
+Early sessions assumed the hardware was a Jetson Nano 4~GB and attempted to flash
+JetPack~4.x/5.x images accordingly. All such images failed to boot. The team
+subsequently identified the actual hardware as a Jetson Orin Nano Super
+(module~P3767, carrier board~P3768) and determined that JetPack~6.0+ is required
+for this SoC generation. The earlier JetPack lines target the Tegra~X1 architecture
+used in the original Nano, not the Orin's Tegra234/Ampere architecture. The JetPack~6.2
+SD card image was the first to boot successfully.
+
+\section{April --- WiFi, Repository Research, and Power Discovery}
+\label{sec:april}
+
+With SSH access established over Ethernet, the team diagnosed the WiFi blocker:
+the onboard Intel Wireless~8265/8275 card was physically present on the PCIe bus
+but produced no network interface because JetPack~6.x ships a stripped-down kernel
+without the \texttt{iwlwifi} module. The team installed the \texttt{backport-iwlwifi-dkms}
+package to resolve this. During hardware reassembly, the team discovered that the
+JETANK expansion board cannot power the Jetson Orin Nano mainboard at all, which
+fundamentally reshaped the project's power architecture (Section~\ref{sec:power-architecture}).
+
+\section{Late April --- WiFi Resolution and Python Environment}
+\label{sec:late-april}
+
+The DKMS backport was explicitly installed against the running kernel, bringing up
+the \texttt{wlP1p1s0} interface permanently. In parallel, the team resolved a broken
+apt-managed pip installation by bootstrapping pip directly from the PyPA install
+script, after a virtual-environment workaround proved insufficient for system-wide
+package management.
+
+\section{May --- Desktop Environment and System Stabilisation}
+\label{sec:may}
+
+A silent GDM3 failure (the \texttt{gdm3} binary itself was missing from the JetPack
+image, masked by a systemd \texttt{RemainAfterExit} flag) was diagnosed and fixed by
+reinstalling the package. With WiFi, pip, and the desktop environment all stable,
+the team turned to full hardware assembly: camera, OLED, servos, and finally drive
+motors.
+
+\section{Hardware Bring-Up --- Camera, OLED, and Servos}
+\label{sec:hardware-bringup}
+
+The CSI camera, OLED status display, and serial bus servos were each brought online
+during this phase, each requiring a JetPack~6.2-specific fix (device-tree overlay,
+I2C bus renumbering, and calibration-value correction respectively). These are
+detailed fully in Chapter~\ref{chap:task-c}.
+
+\section{Drive Motor Investigation (Ongoing at Time of Reporting)}
+\label{sec:motor-investigation}
+
+The final and most significant blocker was the drive motor system: all motion commands
+executed without error but produced no physical movement. Two confirmed software bugs
+were fixed (Section~\ref{sec:drive-motor-bringup}), but the root cause was not fully
+resolved before the reporting deadline, which in turn blocked implementation of
+Tasks~B and~A.
+
+%==============================================================================
+\chapter{Results: Task C --- Hardware Assembly and Integration}
+\label{chap:task-c}
+%==============================================================================
+
+Task~C covered chassis assembly, Jetson platform integration, and validation of
+every onboard subsystem (camera, display, servos, motors) plus a stable remote
+development workflow. Ten distinct system-level issues were identified and resolved
+over the course of the semester; they are summarised in Table~\ref{tab:issues-summary}
+and detailed in the following sections.
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of ten resolved issues in Task~C.}
+\label{tab:issues-summary}
+\small
+\begin{tabular}{@{}p{0.6in}p{1.3in}p{1.6in}p{1.6in}@{}}
+\toprule
+\textbf{Category} & \textbf{Problem} & \textbf{Root Cause} & \textbf{Fix} \\
+\midrule
+OS & Image would not boot & JetPack~4.x/5.x images target Tegra~X1 (Nano),
+not Tegra234/Ampere (Orin) & Flashed JetPack~6.2 SD card image \\
+Networking & No WiFi interface present & \texttt{iwlwifi} kernel module stripped
+from JetPack~6.x kernel & Installed \texttt{backport-iwlwifi-dkms}; explicit
+\texttt{dkms install} step against running kernel \\
+Desktop & No GUI on boot
+(GDM3 ``active (exited)'') & \texttt{/usr/sbin/gdm3} binary missing from JetPack
+image; \texttt{RemainAfterExit} masked failure & \texttt{apt install -\/\/reinstall gdm3} \\
+Python & \texttt{pip} broken via apt & Version conflict between
+\texttt{python3-setuptools} and \texttt{python3-pkg-resources} & Bootstrapped pip
+via PyPA install script (bypassing apt) \\
+Camera & No \texttt{/dev/video0} device & IMX219 driver activated via device-tree
+overlay on JetPack~6.2, not a loadable module & Added \texttt{imx219-A.dtbo}
+overlay to \texttt{extlinux.conf} \\
+Display & OLED stayed blank & Hardcoded I2C bus~1, hardcoded \texttt{wlan0}
+interface, unavailable libraries & Rewrote \texttt{stats.py} using
+\texttt{luma.oled}, I2C bus~7, \texttt{wlP1p1s0}; deployed as systemd service \\
+Servos & Aggressive spin, cable tangling & Centre positions drifted from factory
+default of 512 after mounting & Read back centres via serial scan; updated
+\texttt{servoInit} in installed package and source \\
+Servos & Calibration script crashed silently & \texttt{servoInt.py} used
+\texttt{time.sleep()} without \texttt{import time} & Added the missing import \\
+Motors & PCA9685 channel forced HIGH & \texttt{set\_pwm(channel, 0, 0)} sets
+ON=OFF=0; ON has priority (brake mode) & Changed to
+\texttt{set\_pwm(channel, 0, 4096)} for correct FULL\_OFF \\
+Motors & Wrong PCA9685 channel assignment & \texttt{motor.py} used Adafruit
+MotorHAT layout instead of Waveshare JETANK layout & Remapped to Waveshare
+standard (PWMA=0/AIN1=1/AIN2=2, PWMB=5/BIN1=3/BIN2=4) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Platform Identification and OS Flashing}
+\label{sec:platform-id}
+
+The single highest-leverage finding of the semester was platform identification:
+the Jetson Orin Nano Super requires JetPack~6.0 or later \cite{nvidia_jetpack}. Several legacy SD card
+images were tried and all failed to boot:
+\texttt{jetbot-043\_nano-4gb-jp45},
+\texttt{jetson-nano-jp461-sd-card-image},
+\texttt{jp60dp-orin-nano-sd-card-image}, and
+\texttt{JP512-orin-nano-sd-card-image};
+only the JetPack~6.2 SD card image succeeded.
+Flashing required Balena Etcher rather than Rufus, since Rufus cannot write raw
+Linux partition images, and a Diskpart clean of the SD card on Windows before
+flashing.
+
+\section{Desktop Environment (GDM3)}
+\label{sec:gdm3}
+
+A particularly deceptive failure: \texttt{systemctl status} reported the display
+manager as ``active (exited)''; normally a red flag would be more obvious. The
+root cause was that the \texttt{gdm3} binary itself had never been installed in the
+JetPack image; the init script's executable check silently exits when the binary
+is missing, and a \texttt{RemainAfterExit=yes} flag in the systemd unit made the
+service appear to have run successfully. Reinstalling the package resolved it.
+
+\section{CSI Camera (IMX219-160)}
+\label{sec:csi-camera}
+
+Unlike most kernel drivers, the IMX219 sensor driver on JetPack~6.2 is enabled via
+a device-tree overlay rather than a loadable kernel module. Without an
+\texttt{OVERLAYS} line referencing the correct \texttt{.dtbo} file in
+\texttt{/boot/extlinux/extlinux.conf}, the video input hardware initialises but
+finds no configured sensor, and no \texttt{/dev/video*} device is created. Adding
+the \texttt{imx219-A} overlay (for CAM0) resolved this; the \texttt{-C} variant
+is reserved for CAM1 if the ribbon cable is ever moved.
+
+\section{OLED Display}
+\label{sec:oled}
+
+The original JetBot \texttt{stats.py} script depended on three assumptions that do
+not hold on this hardware: I2C bus~1 (the JETANK expansion board uses bus~7),
+the \texttt{wlan0} interface name, and the \texttt{qwiic} / \texttt{Adafruit\_SSD1306}
+libraries (not installed on JetPack~6.2 and effectively unmaintained). The script
+was rewritten using \texttt{luma.oled} and \texttt{psutil}, and deployed as a
+systemd service so the display comes up automatically on every boot.
+
+\section{Power Architecture Mismatch}
+\label{sec:power-architecture}
+
+The JETANK expansion board was designed for the original Jetson Nano, which accepts
+5~V via its GPIO header. The Jetson Orin Nano Super requires 9--20~V delivered
+through a DC barrel jack and cannot be powered through GPIO at all. This meant the
+two boards had to be powered through entirely separate paths: a Veger T100 USB-C
+Power Delivery bank (set to 15~V via a PD trigger cable into a 5.5$\times$2.5~mm
+barrel plug) for the Jetson, and the existing 18650 battery pack for the motor/servo
+rail through the expansion board. The two rails share only a common ground through
+the GPIO header, which is sufficient for I2C and serial communication.
+
+One behavioural quirk: GPIO pins~2 and~4 are always live at 5~V whenever the Jetson
+itself is powered, regardless of the expansion board's switch state, because the
+OLED, INA219, and PCA9685 are all powered from the Jetson side, not the battery
+side.
+
+This power solution was identified and specified in detail but had not been procured
+and tested end-to-end before the reporting deadline. This is recorded as Blocker~1
+in Chapter~\ref{chap:discussion}.
+
+\section{Servo Calibration}
+\label{sec:servo-calibration}
+
+Feetech SCS15-AP serial bus servos (IDs~1--5, daisy-chained on
+\texttt{/dev/ttyTHS1}) initially spun aggressively to incorrect positions
+on first command, tangling the base-rotation cable around the chassis.
+The cause was that the servos' true centre positions had drifted from the factory
+default of 512 after physical mounting. Reading back the actual centre positions
+via a serial bus scan and updating \texttt{servoInit} to
+\texttt{[None, 1021, 512, 512, 512, 811]} in both the installed package
+and the source repository resolved the issue.
+
+A second, unrelated bug (a missing \texttt{import time} in the calibration
+script) was also fixed. Servo~1 (base rotation) has no physical end-stop and
+is now constrained in software to $\pm$80$^\circ$ from centre to prevent future
+cable tangling.
+
+\section{Drive Motor Bring-Up}
+\label{sec:drive-motor-bringup}
+
+Two confirmed bugs were found and fixed in the \texttt{jetbot\_waveshare} Python
+package:
+
+\begin{enumerate}
+\item \textbf{PCA9685 brake-mode bug:} the driver used
+\texttt{set\_pwm(channel, 0, 0)} to represent a fully-off PWM value, but per the
+PCA9685 datasheet, when ON=OFF=0 the ON bit takes priority and the pin is forced
+permanently HIGH, keeping the TB6612FNG's direction pin high regardless of the
+commanded duty cycle. This was corrected to
+\texttt{set\_pwm(channel, 0, 4096)}, the documented FULL\_OFF encoding.
+\item \textbf{Incorrect channel map:} the code used the Adafruit MotorHAT layout
+(channels~2--4 for motor~1, 5--7 for motor~2) inherited from the original JetBot
+codebase, instead of the Waveshare JETANK's actual layout (PWMA=0/AIN1=1/AIN2=2
+for motor~1, PWMB=5/BIN1=3/BIN2=4 for motor~2).
+\end{enumerate}
+
+Neither fix produced motor movement. This is recorded as Blocker~2 and discussed
+in full in Chapter~\ref{chap:discussion}.
+
+%==============================================================================
+\chapter{Results: Task B --- Camera Fusion for Perception}
+\label{chap:task-b}
+%==============================================================================
+
+Task~B's objective was to produce a single fused perception state per frame,
+combining a lane-following baseline (from the \texttt{road\_following} reference
+notebooks) with an object-detection baseline (YOLO, from the
+\texttt{object\_following} reference notebooks). The fusion design was completed
+at the architectural level; implementation and on-hardware testing were blocked
+by the unresolved power and motor issues described in Chapters~\ref{chap:task-c}
+and~\ref{chap:discussion}.
+
+\section{Fused State Schema}
+\label{sec:fused-schema}
+
+The designed per-frame fusion output combines a continuous lane-offset/confidence
+signal with a discrete obstacle detection, plus a derived risk level and an action
+hint intended for direct consumption by the Task~A controller:
+
+\begin{lstlisting}[caption=Fused perception state schema, label=lst:fused-state,language={}]
+{
+  "lane_offset": 0.10,
+  "lane_conf": 0.84,
+  "obstacle": {"class": "person", "conf": 0.92, "distance_m": 1.7},
+  "risk_level": "high",
+  "action_hint": "stop"
+}
+\end{lstlisting}
+
+\section{Planned Robustness Evaluation}
+\label{sec:robustness-evaluation}
+
+The evaluation plan called for testing the fused pipeline under five degraded
+conditions, with frame-by-frame logging of FPS, confidence stability, and
+qualitative failure cases for each:
+
+\begin{itemize}
+\item Lighting change
+\item Shadows and glare
+\item Motion blur
+\item Partial occlusion of the lane or the obstacle
+\item Different camera angles and resolutions
+\end{itemize}
+
+\section{Status}
+\label{sec:task-b-status}
+
+Not started on hardware. The lane-following and object-detection reference
+notebooks (\texttt{road\_following}, \texttt{object\_following}) were identified
+and reviewed as the intended baselines, and the Docker images for the ML and
+display containers were pulled and verified runnable, but live fusion testing
+requires a driveable robot, which was not achieved this semester.
+
+%==============================================================================
+\chapter{Results: Task A --- Camera Fusion for Driving}
+\label{chap:task-a}
+%==============================================================================
+
+Task~A's objective was to convert the Task~B fused perception state into safe,
+real-time driving commands. As with Task~B, the controller logic was fully designed
+but not implemented or tested on hardware.
+
+\section{Controller Policy (Designed)}
+\label{sec:controller-policy}
+
+\begin{itemize}
+\item Lane centred and clear $\rightarrow$ move forward
+\item Lane offset detected $\rightarrow$ apply steering correction proportional
+to the offset
+\item High risk level or low perception confidence $\rightarrow$ slow down or stop
+\end{itemize}
+
+\section{Safety Gates (Designed)}
+\label{sec:safety-gates}
+
+\begin{itemize}
+\item \textbf{Confidence-threshold stop:} if lane or obstacle confidence falls
+below a set threshold, halt rather than act on an uncertain perception state
+\item \textbf{Obstacle-distance-threshold stop:} halt if a detected obstacle is
+closer than a safe following distance
+\item \textbf{Manual emergency-stop path:} an independent, software-prioritised
+stop command that overrides the controller output
+\end{itemize}
+
+\section{Closed-Loop Evaluation Plan (Designed)}
+\label{sec:evaluation-plan}
+
+Three scenarios were planned for quantitative and qualitative evaluation once the
+robot could drive:
+
+\begin{enumerate}
+\item Normal lane following
+\item An obstacle appearing in the robot's path
+\item An ambiguous, low-confidence perception case
+\end{enumerate}
+
+For each scenario, the plan calls for tracking intervention count, command
+stability/jitter, and safe-stop trigger reliability.
+
+\section{Status}
+\label{sec:task-a-status}
+
+Not started on hardware. This task is fully gated on Task~B perception output and
+a working drive-motor system (Chapter~\ref{chap:discussion}, Blocker~2).
+
+%==============================================================================
+\chapter{Discussion of Critical Blockers}
+\label{chap:discussion}
+%==============================================================================
+
+\section{Blocker 1 --- Power Architecture}
+\label{sec:blocker1}
+
+The JETANK expansion board cannot power the Jetson Orin Nano under any configuration;
+this is a fixed property of the hardware, not a bug. A specific solution (a
+Veger T100 100~W USB-C PD power bank with a 15~V trigger cable into the Orin's
+barrel jack) was identified, with the constraint that the connection must be
+USB-C to USB-C (a USB-A source bypasses PD negotiation entirely and the bank falls
+back to 5~V, which will not boot the Jetson). This was not procured and tested in
+time to support full untethered operation.
+
+\section{Blocker 2 --- Drive Motors Unresponsive}
+\label{sec:blocker2}
+
+This is the project's most significant open technical problem. After fixing the two
+confirmed software bugs (Section~\ref{sec:drive-motor-bringup}), the team ruled out
+the following as causes through direct testing:
+
+\begin{itemize}
+\item PCA9685 not present on the I2C bus: ruled out; confirmed at address
+\texttt{0x60} on bus~7 via \texttt{i2cdetect}
+\item Insufficient battery voltage: ruled out; INA219 reported 11.85~V
+(79\% charge) during testing
+\item Incorrect motor wiring to the expansion board terminals: ruled out;
+connections were physically verified
+\item Wrong Python import path: ruled out; \texttt{from jetbot import Robot}
+was confirmed to resolve to the corrected \texttt{jetbot\_waveshare} package
+\item I2C communication failures: ruled out; no I2C errors were thrown
+on any \texttt{set\_pwm} call
+\end{itemize}
+
+An exhaustive brute-force scan of plausible PCA9685 channel-to-motor mappings,
+including STBY-candidate channels~8,~9,~12,~13,~14, and~15, also produced no
+movement on any combination.
+
+What remains unverified:
+\begin{itemize}
+\item Whether PCA9685 register writes are actually sticking (no register read-back
+has been performed)
+\item The exact PCA9685-to-TB6612FNG pin wiring on the JETANK expansion board
+(no official schematic is publicly available)
+\item Whether the TB6612FNG's STBY pin is hardwired high or requires explicit
+activation from an as-yet-untried channel
+\item Whether the TB6612FNG's VM pin is actually receiving the 12~V motor-supply
+rail through the expansion board's traces
+\end{itemize}
+
+The working hypothesis is that the fault sits below the software layer the team
+controls, most likely a wiring or enable-pin issue on the expansion board itself,
+only resolvable through direct multimeter probing or a manufacturer-provided
+schematic.
+
+\section{Downstream Effect on Tasks B and A}
+\label{sec:downstream-effect}
+
+Because Tasks~B and~A both assume a robot capable of driving, neither could move
+past the design stage this semester. The perception-fusion schema
+(Section~\ref{sec:fused-schema}) and the safety-gated controller policy
+(Sections~\ref{sec:controller-policy}--\ref{sec:safety-gates}) represent the team's
+complete intended design and are ready to be implemented as soon as Blockers~1
+and~2 are resolved.
+
+%==============================================================================
+\chapter{Conclusion}
+\label{chap:conclusion}
+%==============================================================================
+
+This project set out to build an autonomous, camera-fusion-driven JetBot on a
+Jetson Orin Nano Super. The headline technical result is not the driving demo
+originally scoped, but a thorough, hard-won account of why an Orin-generation Jetson
+is not a drop-in replacement for the Jetson Nano the JETANK kit and most public
+JetBot tutorials were designed around, and a documented, ten-issue bring-up path
+that resolves every layer of that mismatch except the motor driver hardware itself.
+
+Ten distinct system-level issues were diagnosed and fixed across OS imaging, kernel
+driver support, desktop environment, Python packaging, CSI camera enablement, OLED
+display, and serial servo calibration. Two blockers remain open: an unprocured
+power-bank solution for the Jetson mainboard, and an unresolved drive-motor fault
+that has been narrowed to the hardware layer through a careful process of elimination.
+The perception-fusion and driving-control logic for Tasks~B and~A were fully designed
+and are implementation-ready.
+
+Although the robot did not drive by the end of the semester, the project produced
+a complete and transferable diagnostic record: every fix is traceable to a specific
+root cause, and every open item has a specific, actionable next diagnostic step
+(Chapter~\ref{chap:recommendations}). That record is, itself, the project's primary
+deliverable.
+
+%==============================================================================
+\chapter[Recommendations]{Recommendations and Future Work}
+\label{chap:recommendations}
+%==============================================================================
+
+\section{To Close Out the Drive Motor Issue}
+\label{sec:close-motor}
+
+\begin{enumerate}
+\item Read back PCA9685 LED0--15 registers via \texttt{i2cget} after each write
+to confirm values are actually sticking in hardware, ruling in or out a silent
+I2C write failure.
+\item Probe the TB6612FNG directly with a multimeter while motion commands are
+issued: VM (motor supply voltage), STBY (should be above 2~V for the H-bridge to
+be enabled), and IN1/IN2 (should toggle between 0~V and 3.3~V with commanded
+direction).
+\item Expand the channel brute-force search to include PCA9685 channels~8--15 in
+every combination tried, not only the previously assumed STBY candidates.
+\item Temporarily wire one motor directly to the battery pack to rule out a damaged
+motor before continuing to debug the driver chain.
+\item Contact Waveshare support directly for the JETANK expansion board schematic,
+or at minimum the PCA9685-to-TB6612FNG pin mapping.
+\end{enumerate}
+
+\section{To Close Out the Power Architecture}
+\label{sec:close-power}
+
+\begin{enumerate}
+\item Procure the Veger T100 and the 15~V PD trigger cable (5.5$\times$2.5~mm barrel)
+and test the full wireless-plus-battery configuration end-to-end.
+\item Evaluate the Waveshare UPS Module (C), built specifically for the Jetson Orin
+family around 21700 cells, as a cleaner single-package alternative.
+\item Mount the chosen power source low and centred on the chassis for balance once
+finalised.
+\end{enumerate}
+
+\section{For Future Orin-Generation JetBot / JETANK Projects}
+\label{sec:future-projects}
+
+\begin{enumerate}
+\item Use JetPack~6.2 (or later) as the baseline image from day one; earlier
+JetPack lines are incompatible with Orin hardware at the SoC level.
+\item Add the IMX219 device-tree overlay and install \texttt{backport-iwlwifi-dkms}
+as standard first-boot steps immediately after flashing.
+\item Replace every \texttt{wlan0} reference in inherited scripts with
+\texttt{wlP1p1s0}; JetPack~6.x uses predictable network interface naming.
+\item Confirm the I2C bus number for the expansion board before writing any
+peripheral code; it is bus~7 on this hardware, not the bus~1 most tutorials
+assume.
+\item Bootstrap pip directly from the PyPA install script rather than relying on
+apt-managed pip, which is broken out of the box on JetPack~6.x.
+\item Plan for an NVMe SSD upgrade early; the 28~GiB microSD card fills quickly
+once Docker images and notebooks are added (83\% used before any ML datasets were
+stored).
+\end{enumerate}
+
+\section{Once Tasks B and A Are Unblocked}
+\label{sec:when-unblocked}
+
+\begin{enumerate}
+\item Implement and test the Task~B fusion pipeline against the planned robustness
+scenarios (lighting, shadows/glare, blur, occlusion, camera angle/resolution
+changes) before integrating with Task~A.
+\item Implement the Task~A controller exactly as designed in
+Chapter~\ref{chap:task-a}, then run the three planned closed-loop scenarios and
+report intervention count, command stability, and safe-stop reliability as the
+project's quantitative result set.
+\end{enumerate}
+
+%==============================================================================
+\chapter{Self-Reflection Note}
+\label{chap:self-reflection}
+%==============================================================================
+
+\section*{Individual Contribution Breakdown}
+
+\begin{table}[htbp]
+\centering
+\caption{Individual contribution percentages.}
+\label{tab:contributions}
+\large
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Team Member} & \textbf{Contribution (\%)} \\
+\midrule
+Adam Ryan   & [\%] \\
+Aidan Ryan  & [\%] \\
+Denis Vasilev & [\%] \\
+Nora Regina Cerveny & [\%] \\
+\midrule
+Total & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+\section*{Adam Ryan}
+[Write your self-reflection here --- approximately 8--10 lines. What did you learn?
+What challenges did you face? How did you contribute to the team? What would you
+do differently?]
+
+\section*{Aidan Ryan}
+[Write your self-reflection here --- approximately 8--10 lines. What did you learn?
+What challenges did you face? How did you contribute to the team? What would you
+do differently?]
+
+\section*{Denis Vasilev}
+[Write your self-reflection here --- approximately 8--10 lines. What did you learn?
+What challenges did you face? How did you contribute to the team? What would you
+do differently?]
+
+\section*{Nora Regina Cerveny}
+[Write your self-reflection here --- approximately 8--10 lines. What did you learn?
+What challenges did you face? How did you contribute to the team? What would you
+do differently?]
+
+%%   BACK MATTER  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\backmatter%
+
+\addtoToC{Bibliography}
+\bibliographystyle{IEEEtranS}
+\typeout{}
+\bibliography{references}
+
+%%   APPENDICES  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{appendices}
+
+\chapter{Full Resolved-Issue Log}
+\label{app:issue-log}
+
+This appendix expands Table~\ref{tab:issues-summary} with the blocking status of
+each issue, for archival and grading reference.
+
+\begin{longtable}{@{}cp{1.8in}p{1.8in}p{1.2in}@{}}
+\caption{Complete issue log with blocking status.}
+\label{tab:issue-log}\\
+\toprule
+\textbf{\#} & \textbf{Issue} & \textbf{Resolution} & \textbf{Blocker for Driving?} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{c}{\tablename\ \thetable{} --- continued from previous page} \\
+\toprule
+\textbf{\#} & \textbf{Issue} & \textbf{Resolution} & \textbf{Blocker for Driving?} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+1 & Wrong OS for Orin hardware (JP4.x/5.x images) & JetPack~6.2 SD card image
+& Yes --- resolved \\
+2 & No WiFi (\texttt{iwlwifi} missing from kernel) & \texttt{backport-iwlwifi-dkms}
+& Yes --- resolved \\
+3 & GDM3 binary missing &
+\texttt{apt install --reinstall gdm3} & No \\
+4 & \texttt{pip} broken via apt &
+Bootstrapped pip via PyPA install script & No \\
+5 & Camera not detected (no \texttt{/dev/video0}) &
+IMX219 device-tree overlay in \texttt{extlinux.conf} & No \\
+6 & OLED: wrong I2C bus, interface name, missing libs &
+Rewrote with \texttt{luma.oled}, bus~7, \texttt{wlP1p1s0} & No \\
+7 & Servo centres drifted from factory default &
+Updated \texttt{servoInit} in both \texttt{TTLServo.py} copies & No \\
+8 & \texttt{servoInt.py} missing \texttt{import time} &
+Added the missing import & No \\
+9 & PCA9685 \texttt{set\_pwm(0,0)} forces pin HIGH (brake mode) &
+Changed to \texttt{set\_pwm(0, 4096)} for FULL\_OFF &
+Yes --- critical (fix applied, motors still not moving) \\
+10 & Motor channel mapping wrong for Waveshare hardware &
+Updated to Waveshare PCA9685 channel layout &
+Yes --- critical (fix applied, motors still not moving) \\
+\end{longtable}
+
+\end{appendices}
+\end{document}
